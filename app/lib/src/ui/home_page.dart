@@ -7,6 +7,7 @@ import '../core/i18n.dart';
 import '../core/localizer_service.dart';
 import '../core/models.dart';
 import '../core/patch_table.dart';
+import '../core/window_control.dart';
 import 'theme.dart';
 import 'title_bar.dart';
 
@@ -17,6 +18,10 @@ class HomePage extends StatefulWidget {
     required this.onThemeModeChanged,
     required this.language,
     required this.onLanguageChanged,
+    this.pendingAction,
+    this.service,
+    this.onQuit,
+    this.elevated = false,
   });
 
   final ThemeMode themeMode;
@@ -24,16 +29,31 @@ class HomePage extends StatefulWidget {
   final AppLanguage language;
   final ValueChanged<AppLanguage> onLanguageChanged;
 
+  // Set when the process was started elevated by a previous instance, so the
+  // requested operation runs as soon as the installation has been detected.
+  final PendingAction? pendingAction;
+
+  // Supplied by tests to drive the dialogs without touching a real installation.
+  final LocalizerService? service;
+
+  // Called instead of terminating the process when this instance hands the
+  // operation over to an elevated one. Tests use it to observe the hand-off.
+  final Future<void> Function()? onQuit;
+
+  // True when this instance was already started through the elevation prompt.
+  final bool elevated;
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  final LocalizerService _service = LocalizerService();
+  late final LocalizerService _service = widget.service ?? LocalizerService();
 
   InstallationReport? _report;
   bool _busy = false;
   bool _detecting = true;
+  bool _pendingConsumed = false;
   double _progress = 0;
   String _progressLabel = '';
   final List<String> _log = <String>[];
@@ -70,26 +90,62 @@ class _HomePageState extends State<HomePage> {
       _report = r;
       _detecting = false;
     });
+
+    // An elevated relaunch carries the operation that was originally requested.
+    final PendingAction? pending = widget.pendingAction;
+    if (pending != null && !_pendingConsumed) {
+      _pendingConsumed = true;
+      await _run(localizing: pending == PendingAction.localize);
+    }
   }
 
   Future<void> _run({required bool localizing}) async {
     final InstallationReport? r = _report;
     if (r?.install == null) return;
 
+    // Elevation comes first: closing the VMware processes needs administrator
+    // rights too, so the confirmation belongs to the instance that can act on it.
     if (!await _service.canWriteInstall(r!.install!)) {
       if (!mounted) return;
+
+      // Already elevated and still unable to write: asking again would loop.
+      if (widget.elevated) {
+        await _showResult(ok: false, detail: _s(Str.errStillNoAccess));
+        return;
+      }
+
       final bool go = await _confirmElevation();
       if (!go) return;
-      final bool started =
-          _service.requestElevation(language: widget.language);
+      final bool started = _service.requestElevation(
+        language: widget.language,
+        action:
+            localizing ? PendingAction.localize : PendingAction.restore,
+      );
       if (!mounted) return;
       if (!started) {
         _toast(_s(Str.toastElevationDenied));
         return;
       }
-      unawaited(Future<void>.delayed(
-          const Duration(milliseconds: 600), () => _quit()));
+      // The elevated instance takes over from here and reports its own result.
+      await _quit();
       return;
+    }
+
+    // Ask before terminating the session; the dialog states the consequence
+    // rather than closing VMware silently.
+    if (await _service.vmwareProcessesRunning()) {
+      if (!mounted) return;
+      final bool go = await _confirmClose();
+      if (!go) return;
+
+      setState(() {
+        _busy = true;
+        _progress = 0.02;
+        _progressLabel = _s(Str.logClosingProcess);
+        _log.clear();
+      });
+      await _service.closeVmwareProcesses();
+      if (!mounted) return;
     }
 
     setState(() {
@@ -103,6 +159,9 @@ class _HomePageState extends State<HomePage> {
         ? _service.localize(r, language: widget.language)
         : _service.restore(r, language: widget.language);
 
+    bool failed = false;
+    String failureMessage = '';
+
     await for (final OpProgress p in s) {
       if (!mounted) return;
       setState(() {
@@ -110,6 +169,10 @@ class _HomePageState extends State<HomePage> {
         _progressLabel = p.message;
         if (p.log != null) _log.add(p.log!);
       });
+      if (p.failed) {
+        failed = true;
+        failureMessage = p.message;
+      }
     }
 
     if (!mounted) return;
@@ -119,17 +182,94 @@ class _HomePageState extends State<HomePage> {
     await _detect();
 
     if (!mounted) return;
-    final bool ok = _report?.state ==
-        (localizing
-            ? LocalizationState.localized
-            : LocalizationState.original);
+    final bool ok = !failed &&
+        _report?.state ==
+            (localizing
+                ? LocalizationState.localized
+                : LocalizationState.original);
+
     _toast(ok
         ? (localizing ? _s(Str.toastLocalizeDone) : _s(Str.toastRestoreDone))
         : _s(Str.toastUnexpected));
+
+    await _showResult(ok: ok, detail: failed ? failureMessage : '');
   }
 
-  void _quit() {
+  Future<void> _quit() async {
+    final Future<void> Function()? onQuit = widget.onQuit;
+    if (onQuit != null) {
+      await onQuit();
+      return;
+    }
+    await WindowControl.close();
+    // The window closes through its own message loop; this is only a fallback
+    // so a refused close cannot leave the handing-off instance behind.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     exit(0);
+  }
+
+  Future<bool> _confirmClose() async {
+    final Strings s = _s;
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext c) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded,
+            color: AppTheme.warning, size: 30),
+        title: Text(s(Str.confirmCloseTitle)),
+        content: Text(s(Str.confirmCloseBody)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: Text(s(Str.confirmCloseCancel)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.warning),
+            onPressed: () => Navigator.pop(c, true),
+            child: Text(s(Str.confirmCloseContinue)),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _showResult({required bool ok, required String detail}) async {
+    final Strings s = _s;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext c) => AlertDialog(
+        icon: Icon(
+          ok ? Icons.check_circle_rounded : Icons.error_rounded,
+          color: ok ? AppTheme.success : AppTheme.danger,
+          size: 30,
+        ),
+        title: Text(s(ok ? Str.resultTitleDone : Str.resultTitleFailed)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(s(ok ? Str.resultBodyDone : Str.resultBodyFailed)),
+              if (detail.trim().isNotEmpty) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  detail,
+                  style: Theme.of(c).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(c).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: Text(s(Str.resultClose)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool> _confirmElevation() async {

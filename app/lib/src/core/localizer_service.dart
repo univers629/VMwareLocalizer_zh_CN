@@ -300,10 +300,40 @@ class LocalizerService {
     }
   }
 
-  bool requestElevation({AppLanguage? language}) {
+  Future<bool> vmwareProcessesRunning() => _vmwareRunning();
+
+  // Terminates every process that holds the installation directory open. Called
+  // only after the user has agreed to it, since running virtual machines are
+  // powered off as a side effect.
+  Future<void> closeVmwareProcesses() async {
+    for (final String exe in <String>[
+      'vmware.exe',
+      'vmware-tray.exe',
+      'vmware-vmx.exe',
+    ]) {
+      try {
+        await Process.run(
+          'taskkill',
+          <String>['/f', '/im', exe],
+          runInShell: false,
+        );
+      } catch (_) {
+        // A process that is not running makes taskkill fail; that is expected.
+      }
+    }
+
+    // Give the killed processes a moment to release their file handles.
+    for (int attempt = 0; attempt < 10; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!await _vmwareRunning()) return;
+    }
+  }
+
+  bool requestElevation({AppLanguage? language, PendingAction? action}) {
     return Win32.relaunchElevated(<String>[
       '--elevated',
       if (language != null) '--language=${language.code}',
+      if (action != null) action.flag,
     ]);
   }
 
@@ -405,9 +435,16 @@ class LocalizerService {
           }
         }
 
-        emit(0.10, Str.logStoppingServices);
+        // Record which services were actually running, so the same set can be
+        // put back afterwards rather than starting ones the user had stopped.
+        final Map<String, bool> serviceWasRunning = <String, bool>{};
         if (manage) {
+          emit(0.10, Str.logStoppingServices);
           for (final String svc in _services) {
+            final bool running = await _serviceRunning(svc);
+            serviceWasRunning[svc] = running;
+            if (!running) continue;
+
             emit(0.10, Str.logStoppingService,
                 log: Str.logStoppingService, values: <String, String>{'name': svc});
             await Process.run('net', <String>['stop', svc], runInShell: false);
@@ -429,6 +466,7 @@ class LocalizerService {
         emit(0.90, Str.logStartingServices);
         if (manage) {
           for (final String svc in _services) {
+            if (serviceWasRunning[svc] != true) continue;
             emit(0.90, Str.logStartingService,
                 log: Str.logStartingService, values: <String, String>{'name': svc});
             await Process.run('net', <String>['start', svc], runInShell: false);
@@ -461,6 +499,21 @@ class LocalizerService {
     'VMware NAT Service',
     'VMUSBArbService',
   ];
+
+  // The state names in sc output are not localised, so the text is stable
+  // regardless of the display language.
+  static Future<bool> _serviceRunning(String name) async {
+    try {
+      final ProcessResult r = await Process.run(
+        'sc',
+        <String>['query', name],
+        runInShell: false,
+      );
+      return (r.stdout as String).contains('RUNNING');
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _applyPatch(
     VmwareInstall install, {

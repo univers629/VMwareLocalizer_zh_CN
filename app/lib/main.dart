@@ -15,6 +15,7 @@ import 'src/ui/theme.dart';
 
 const String _languageFlag = '--language=';
 const String _themeFlag = '--theme=';
+const String _actionFlag = '--action=';
 
 const int _minWindowWidth = 520;
 const int _minWindowHeight = 400;
@@ -28,6 +29,8 @@ String? _flag(List<String> args, String prefix) {
   }
   return null;
 }
+
+bool _hasFlag(List<String> args, String name) => args.contains(name);
 
 Future<void> main(List<String> args) async {
   if (args.isNotEmpty && args.first == '--selftest') {
@@ -64,6 +67,8 @@ Future<void> main(List<String> args) async {
   runApp(LocalizerApp(
     initialLanguage: language,
     initialThemeMode: theme,
+    elevated: _hasFlag(args, '--elevated'),
+    pendingAction: PendingAction.fromName(_flag(args, _actionFlag)),
   ));
 }
 
@@ -177,10 +182,18 @@ class LocalizerApp extends StatefulWidget {
     super.key,
     required this.initialLanguage,
     required this.initialThemeMode,
+    this.elevated = false,
+    this.pendingAction,
   });
 
   final AppLanguage initialLanguage;
   final ThemeMode initialThemeMode;
+
+  // True when this instance was started by an earlier one through the elevation
+  // prompt, which means the requested operation still has to be carried out.
+  final bool elevated;
+
+  final PendingAction? pendingAction;
 
   @override
   State<LocalizerApp> createState() => _LocalizerAppState();
@@ -248,6 +261,8 @@ class _LocalizerAppState extends State<LocalizerApp> {
         onThemeModeChanged: _setTheme,
         language: _language,
         onLanguageChanged: _setLanguage,
+        pendingAction: widget.pendingAction,
+        elevated: widget.elevated,
       ),
     );
   }

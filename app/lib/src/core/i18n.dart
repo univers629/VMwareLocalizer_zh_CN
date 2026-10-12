@@ -56,6 +56,18 @@ enum Str {
   elevationContinue,
   toastElevationDenied,
 
+  confirmCloseTitle,
+  confirmCloseBody,
+  confirmCloseCancel,
+  confirmCloseContinue,
+
+  resultTitleDone,
+  resultTitleFailed,
+  resultBodyDone,
+  resultBodyFailed,
+  resultBodyDetail,
+  resultClose,
+
   toastLocalizeDone,
   toastRestoreDone,
   toastUnexpected,
@@ -131,6 +143,7 @@ enum Str {
   errPayloadNotExtracted,
   errPayloadVerify,
   errPayloadExtract,
+  errStillNoAccess,
 }
 
 class Strings {
@@ -193,6 +206,25 @@ class Strings {
     Str.elevationContinue: 'Continue',
     Str.toastElevationDenied:
         'Administrator rights were not granted, so the operation was cancelled.',
+    Str.confirmCloseTitle: 'VMware is running',
+    Str.confirmCloseBody:
+        'VMware Workstation is currently running. Completing this operation '
+        'requires VMware Workstation and its services to be closed.\n\n'
+        'The running Virtual Machines will be shut down forcibly, and any '
+        'unsaved data inside them will be lost.\n\n'
+        'Please save your work and close VMware Workstation before continuing.',
+    Str.confirmCloseCancel: 'Cancel',
+    Str.confirmCloseContinue: 'Close and continue',
+    Str.resultTitleDone: 'Completed',
+    Str.resultTitleFailed: 'Failed',
+    Str.resultBodyDone:
+        'The operation finished successfully. The VMware Workstation interface '
+        'has been updated.',
+    Str.resultBodyFailed:
+        'The operation did not complete. The installation was left untouched or '
+        'rolled back; see the details below.',
+    Str.resultBodyDetail: '{detail}',
+    Str.resultClose: 'Close',
     Str.toastLocalizeDone: 'Language pack applied',
     Str.toastRestoreDone: 'Restored to the original state',
     Str.toastUnexpected:
@@ -288,6 +320,9 @@ class Strings {
         'Verification of the bundled language files failed. The application package '
         'may be damaged.',
     Str.errPayloadExtract: 'The bundled language files could not be unpacked ({detail}).',
+    Str.errStillNoAccess:
+        'The installation directory could not be written to even with administrator '
+        'rights, so nothing was changed.',
   };
 
 
@@ -312,6 +347,20 @@ class Strings {
     Str.elevationCancel: '取消',
     Str.elevationContinue: '继续',
     Str.toastElevationDenied: '未获得管理员权限，操作已取消。',
+    Str.confirmCloseTitle: 'VMware 正在运行',
+    Str.confirmCloseBody:
+        'VMware Workstation 当前正在运行。完成本次操作需要关闭 VMware Workstation '
+        '及其服务。\n\n'
+        '正在运行的虚拟机会被强制关闭，其中的未保存数据将会丢失。\n\n'
+        '请先保存工作并关闭 VMware Workstation，然后继续。',
+    Str.confirmCloseCancel: '取消',
+    Str.confirmCloseContinue: '关闭并继续',
+    Str.resultTitleDone: '操作完成',
+    Str.resultTitleFailed: '操作失败',
+    Str.resultBodyDone: '操作已成功完成，VMware Workstation 的界面已更新。',
+    Str.resultBodyFailed: '操作未能完成。安装目录未被改动或已回滚，详情见下方。',
+    Str.resultBodyDetail: '{detail}',
+    Str.resultClose: '关闭',
     Str.toastLocalizeDone: '语言包已应用',
     Str.toastRestoreDone: '已恢复为原版',
     Str.toastUnexpected: '操作未达到预期状态，请查看日志。',
@@ -389,6 +438,7 @@ class Strings {
     Str.errPayloadNotExtracted: '内置语言文件尚未解压。',
     Str.errPayloadVerify: '内置语言文件校验失败，程序包可能已损坏。',
     Str.errPayloadExtract: '无法解压内置语言文件（{detail}）。',
+    Str.errStillNoAccess: '即使拥有管理员权限仍无法写入安装目录，因此未做任何改动。',
   };
 
 }

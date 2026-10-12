@@ -33,7 +33,9 @@ constexpr int kCornerRadius = 8;
 #define DWMWA_COLOR_NONE 0xFFFFFFFE
 #endif
 
-constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+// A class name unique to this application, so a later launch can find the
+// running instance's window without matching an unrelated Flutter application.
+constexpr const wchar_t kWindowClassName[] = L"VMWARE_LOCALIZER_MAIN_WINDOW";
 
 constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
@@ -148,11 +150,29 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
-  HWND window = CreateWindow(
-      window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
-      Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
-      nullptr, nullptr, GetModuleHandle(nullptr), this);
+  const int window_width = Scale(size.width, scale_factor);
+  const int window_height = Scale(size.height, scale_factor);
+
+  // Place the window in the middle of the monitor's work area. The requested
+  // origin is ignored as a position and only selects the monitor, so the window
+  // never appears in the corner regardless of what the caller passes.
+  MONITORINFO monitor_info{};
+  monitor_info.cbSize = sizeof(monitor_info);
+  RECT work_area{};
+  if (::GetMonitorInfo(monitor, &monitor_info)) {
+    work_area = monitor_info.rcWork;
+  } else {
+    work_area = RECT{0, 0, GetSystemMetrics(SM_CXSCREEN),
+                     GetSystemMetrics(SM_CYSCREEN)};
+  }
+  const int work_width = work_area.right - work_area.left;
+  const int work_height = work_area.bottom - work_area.top;
+  const int window_x = work_area.left + (work_width - window_width) / 2;
+  const int window_y = work_area.top + (work_height - window_height) / 2;
+
+  HWND window = CreateWindow(window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
+                             window_x, window_y, window_width, window_height,
+                             nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
     return false;

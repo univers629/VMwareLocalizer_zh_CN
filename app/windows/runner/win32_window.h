@@ -9,6 +9,9 @@
 
 class Win32Window {
  public:
+  static constexpr const wchar_t* kWindowClassName =
+      L"VMWARE_LOCALIZER_MAIN_WINDOW";
+
   struct Point {
     unsigned int x;
     unsigned int y;

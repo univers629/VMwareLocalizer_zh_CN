@@ -94,3 +94,17 @@ const Map<int, String> vmwareLanguageIds = <int, String>{
 const String supportedVersion = '26.0.1.2799';
 
 bool get isWindows => Platform.isWindows;
+
+enum PendingAction {
+  localize,
+  restore;
+
+  static PendingAction? fromName(String? value) {
+    for (final PendingAction a in PendingAction.values) {
+      if (a.name == value) return a;
+    }
+    return null;
+  }
+
+  String get flag => '--action=$name';
+}
