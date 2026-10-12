@@ -1,0 +1,3 @@
+tags:
+  integration:
+    description: Requires the host machine's real VMware installation.
