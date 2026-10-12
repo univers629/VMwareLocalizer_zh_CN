@@ -7,6 +7,13 @@
 ![Interface](https://img.shields.io/badge/interface-%E4%B8%AD%E6%96%87%20%7C%20English-4C5BD4)
 ![Package](https://img.shields.io/badge/package-single%20exe-2E9E6B)
 
+<table>
+  <tr>
+    <td width="50%"><img src="https://raw.githubusercontent.com/univers629/MacrodownNoteAssets/main/dev/VMwareLocalizer/20261012115526437.png" alt="汉化前的原版界面"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/univers629/MacrodownNoteAssets/main/dev/VMwareLocalizer/20261012115440198.png" alt="汉化后的中文界面"></td>
+  </tr>
+</table>
+
 把 VMware Workstation Pro 26.0.1 的界面汉化为简体中文，并可一键还原为备份。
 
 ## 为什么需要它
